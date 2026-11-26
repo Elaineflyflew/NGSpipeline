@@ -50,10 +50,10 @@ genome/Homo_sapiens.GRCh38.dna.primary_assembly.fa   ← 课程服务器那份
 genome/ref.fa                                ← 自己重命名的
 ```
 
-想确认它选中了哪个，跑 `bin/wes-pipeline -h` 之外最简单的办法是看启动横幅：
+想确认它选中了哪个，跑 `bin/germline-wes-wgs -h` 之外最简单的办法是看启动横幅：
 
 ```
-=== wes-pipeline 2.0.0 | 样本 Case1 ===
+=== germline-wes-wgs 2.0.0 | 样本 Case1 ===
 参考: /path/to/reference/genome/Homo_sapiens_assembly38.fasta
 ```
 

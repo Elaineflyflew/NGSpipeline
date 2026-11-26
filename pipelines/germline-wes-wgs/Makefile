@@ -8,13 +8,13 @@
 #    make lint       所有脚本语法检查
 # =============================================================================
 SHELL := /bin/bash
-PIPE  := bin/wes-pipeline
+PIPE  := bin/germline-wes-wgs
 DEPLOY := deploy/deploy.sh
 
 .PHONY: help doctor status deploy test lint clean-results env ref bundle vep
 
 help:
-	@echo "wes-pipeline"
+	@echo "germline-wes-wgs"
 	@echo ""
 	@echo "  make doctor        软件体检（已装了什么、还缺什么）"
 	@echo "  make status        查看参考数据安装情况"
@@ -55,7 +55,7 @@ test:
 	@bash tests/smoke_test.sh
 
 lint:
-	@for f in bin/wes-pipeline src/*.sh deploy/*.sh tests/*.sh; do \
+	@for f in bin/germline-wes-wgs src/*.sh deploy/*.sh tests/*.sh; do \
 		printf '%-34s' "$$f"; bash -n "$$f" && echo OK || exit 1; \
 	done
 

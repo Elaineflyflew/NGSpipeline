@@ -1,30 +1,37 @@
-# 参考数据与外部工具：体积大、可重下，不进版本库
-reference/genome/
-reference/gatk_bundle/
-reference/vep/
-reference/funcotator/
-reference/bed/*.bed
+# NGSpipeline 根级忽略规则
+# 各流程自己也有 .gitignore（便于单目录拷走），这里是兜底：
+# 新加的流程即使忘了写，也不会把几十 G 的参考数据提交进去。
 
-extratools/deepvariant/
-extratools/annovar/
-extratools/bin/
-extratools/*.tar.gz
-extratools/*.tar.bz2
+# 参考数据
+**/reference/genome/
+**/reference/gatk_bundle/
+**/reference/vep/
+**/reference/funcotator/
+**/reference/bed/*.bed
+
+# 外部工具
+**/extratools/deepvariant/
+**/extratools/annovar/
+**/extratools/bin/
+**/extratools/*.tar.gz
+**/extratools/*.tar.bz2
 
 # 但保留说明文件
-!reference/README.md
-!extratools/README.md
+!**/reference/README.md
+!**/extratools/README.md
 
 # deploy 生成的按需安装清单
-env/environment.missing.yaml
+**/env/environment.missing.yaml
 
 # 运行产物
-results/
+**/results/
 *.log
 .snakemake/
-
-# 临时
-.tmp/
+**/.tmp/
 *.tmp
 __pycache__/
+
+# 系统 / 编辑器
 .DS_Store
+.idea/
+.vscode/

@@ -31,7 +31,7 @@ source "$SELF_DIR/60_funcotator.sh"
 
 usage() {
 cat <<EOF
-deploy.sh —— 安装 wes-pipeline 的参考数据与外部工具
+deploy.sh —— 安装 germline-wes-wgs 的参考数据与外部工具
 
 用法
   bash deploy/deploy.sh [选项] <目标>...

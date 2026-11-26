@@ -10,7 +10,7 @@
 set -uo pipefail
 
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-PIPE="$PROJECT_ROOT/bin/wes-pipeline"
+PIPE="$PROJECT_ROOT/bin/germline-wes-wgs"
 DEPLOY="$PROJECT_ROOT/deploy/deploy.sh"
 
 T=$(mktemp -d "${TMPDIR:-/tmp}/wes-smoke.XXXXXX")
@@ -64,7 +64,7 @@ HITS=$(LC_ALL=C awk '
       print FILENAME ":" FNR ": " substr(line, RSTART, RLENGTH)
       line = substr(line, RSTART + RLENGTH)
     }
-  }' "$PROJECT_ROOT"/bin/wes-pipeline "$PROJECT_ROOT"/src/*.sh \
+  }' "$PROJECT_ROOT"/bin/germline-wes-wgs "$PROJECT_ROOT"/src/*.sh \
      "$PROJECT_ROOT"/deploy/*.sh 2>/dev/null)
 if [[ -z "$HITS" ]]; then
   ok "没有 \$VAR 后紧跟全角字符（bash 3.2 兼容）"

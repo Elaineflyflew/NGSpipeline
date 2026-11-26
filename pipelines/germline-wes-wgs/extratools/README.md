@@ -1,7 +1,7 @@
 # extratools/ —— 非 conda 安装的外部工具
 
 有些工具不适合放 conda（体积大、依赖冲突、需要许可证），统一放这里。
-`bin/wes-pipeline` 启动时会把 `extratools/bin` 加进 PATH，
+`bin/germline-wes-wgs` 启动时会把 `extratools/bin` 加进 PATH，
 所以自己编译的小工具丢进 `bin/` 就能直接调用。
 
 ```
