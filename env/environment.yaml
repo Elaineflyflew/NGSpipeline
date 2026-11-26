@@ -1,0 +1,39 @@
+# =============================================================================
+#  env/environment.yaml —— 流水线依赖（conda）
+#
+#    conda env create -f env/environment.yaml
+#    conda activate wes
+#
+#  注意：这个文件是"完整清单"，作为参考和手动安装用。
+#  deploy.sh env 不会直接拿它建环境，而是先体检，只把缺失的包写进
+#  env/environment.missing.yaml 再装——已经装好的工具不重复装。
+#
+#  DeepVariant 不放进这个环境：它和 gatk4 的依赖（尤其是 protobuf/abseil）
+#  容易冲突，官方推荐用 singularity 镜像跑。镜像由 deploy/50_deepvariant.sh 准备。
+#  如果一定要本机跑，单独建环境：
+#    conda create -n dv -c bioconda deepvariant
+# =============================================================================
+name: wes
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # 质控与修剪
+  - fastqc>=0.12
+  - fastp>=0.23
+  - multiqc>=1.15
+  # 比对与 BAM 处理
+  - bwa>=0.7.17
+  - samtools>=1.17
+  - htslib>=1.17          # bgzip / tabix
+  # 变异检测与注释
+  - bcftools>=1.17
+  - gatk4>=4.4            # 自带 JRE
+  - ensembl-vep>=110
+  - perl-parallel-forkmanager   # vep --fork 需要
+  # 下载
+  - curl
+  - aria2
+  # 构建 singularity 镜像（可选，也可以系统级安装）
+  - apptainer

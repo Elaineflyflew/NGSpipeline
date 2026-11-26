@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  bin/wes-pipeline —— 主程序（入口）
+#
+#  这里只做三件事，业务逻辑一律不写在这里：
+#    1. 定位项目根目录，加载 src/ 下所有模块（文件名带序号，保证加载顺序）
+#    2. 解析命令行、初始化上下文
+#    3. 按 STAGES 顺序调用各阶段函数
+#
+#  想加一条新的 caller/annotator？在 src/ 里加一个文件、在 43/53 的 case 里
+#  加一行分支就行，主程序不用动。
+# =============================================================================
+set -euo pipefail
+set -E
+# set -E 不能省：bash 默认不把 ERR trap 传给函数，而所有阶段都是函数
+trap 'printf "\n[FATAL] %s() 第 %s 行: %s\n" "${FUNCNAME[0]:-main}" "${LINENO}" "${BASH_COMMAND}" >&2' ERR
+
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd "$SELF_DIR/.." && pwd)
+export PROJECT_ROOT
+
+# ---------------------------------------------------------------- 加载模块
+for _m in "$PROJECT_ROOT"/src/*.sh; do
+  [[ -f "$_m" ]] || continue
+  # shellcheck source=/dev/null
+  source "$_m"
+done
+unset _m
+
+# ---------------------------------------------------------------- 默认值
+# config/pipeline.conf 用 ${VAR:=...}，所以环境变量里的值不会被覆盖
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/config/pipeline.conf"
+
+# ---------------------------------------------------------------- 解析与初始化
+parse_cli "$@"
+
+if (( LIST_STAGES )); then
+  list_stages
+  exit 0
+fi
+
+init_context
+header
+preflight
+
+if (( CHECK_ONLY )); then
+  if (( MISSING_TOOLS > 0 )); then
+    die "--check: 缺失 ${MISSING_TOOLS} 个命令（见上面的 WARN），未执行任何数据步骤"
+  fi
+  log "--check 通过，未执行任何数据步骤"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- 主流程
+run_pipeline() {
+  stage_enabled qc       && run_stage qc       stage_qc
+  stage_enabled trim     && run_stage trim     stage_trim
+  stage_enabled align    && run_stage align    stage_align
+  stage_enabled bam      && run_stage bam      stage_bam
+  stage_enabled call     && stage_call
+  stage_enabled annotate && stage_annotate
+  stage_enabled report   && stage_report
+  return 0
+}
+
+run_pipeline
+
+section "完成"
+log "样本: $SAMPLE"
+log "报告: $REP/summary.txt"
+if (( DRY_RUN )); then
+  log "（dry-run 模式，未实际执行）"
+elif [[ -s "$REP/igv.bat" ]]; then
+  log "IGV:  igv --batch $REP/igv.bat"
+fi

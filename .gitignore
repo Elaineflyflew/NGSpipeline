@@ -1,0 +1,30 @@
+# 参考数据与外部工具：体积大、可重下，不进版本库
+reference/genome/
+reference/gatk_bundle/
+reference/vep/
+reference/funcotator/
+reference/bed/*.bed
+
+extratools/deepvariant/
+extratools/annovar/
+extratools/bin/
+extratools/*.tar.gz
+extratools/*.tar.bz2
+
+# 但保留说明文件
+!reference/README.md
+!extratools/README.md
+
+# deploy 生成的按需安装清单
+env/environment.missing.yaml
+
+# 运行产物
+results/
+*.log
+.snakemake/
+
+# 临时
+.tmp/
+*.tmp
+__pycache__/
+.DS_Store
