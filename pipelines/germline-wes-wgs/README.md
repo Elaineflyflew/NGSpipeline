@@ -6,11 +6,7 @@
 > 本流程是 [NGSpipeline](../../README.md) 仓库中的一个流程，位于 `pipelines/germline-wes-wgs/`。
 > 下面所有命令都在这个目录下执行：`cd pipelines/germline-wes-wgs`。
 
-```
-FASTQ ──▶ 质控 ──▶ 修剪 ──▶ 比对 ──▶ BAM 精修 ──▶ 变异检测 ──▶ 注释 ──▶ 报告 + IGV
-         FastQC   fastp   bwa mem   fixmate/markdup   bcftools │ GATK │ DeepVariant
-                                                                  VEP │ ANNOVAR │ Funcotator
-```
+![流程结构](docs/pipeline.svg)
 
 ## 目录结构
 
@@ -58,6 +54,7 @@ germline-wes-wgs/
 │   └── bin/                       自己编译的小工具，自动加进 PATH
 ├── env/environment.yaml           conda 环境定义
 ├── tests/smoke_test.sh            冒烟测试（不需要生信工具）
+├── docs/pipeline.svg              流程图（本 README 顶部那张）
 ├── Makefile
 └── README.md
 ```
@@ -85,6 +82,46 @@ bin/germline-wes-wgs -1 raw/Case1_R1.fastq.gz -2 raw/Case1_R2.fastq.gz \
 less results/07_report/summary.txt
 igv --batch results/07_report/igv.bat
 ```
+
+## 输入与输出
+
+**输入**（除测序数据外都有默认值，deploy 之后不用改）：
+
+| 项 | 怎么给 | 默认 |
+|---|---|---|
+| 测序数据 | `-1/-2` 双端 FASTQ，或 `--bam` 已有 BAM | 必填二选一 |
+| 参考基因组 | `-r ref.fa` | 自动扫 `reference/genome/`，按 `.fai/.bwt/.dict` 打分选，不看文件名 |
+| 捕获区间 | `-b exome.bed` | `reference/bed/*.bed` 第一个；都没有则全基因组 |
+| GATK bundle | `--bundle DIR` | `reference/gatk_bundle/`，`.vcf.gz` 与未压缩 `.vcf` 都认 |
+| 注释库 | `--vep-cache` / `--annovar-db` / `--funcotator-data` | `reference/vep`、`extratools/annovar/humandb`、`reference/funcotator/*/` |
+
+**输出**（默认 `./results`，`-o` 可改）：
+
+```
+results/
+├── 00_logs/<sample>.<时间戳>.log        整条流程的完整日志
+├── 01_qc/          *_fastqc.html .zip
+├── 02_clean/       <s>_R1.clean.fq.gz  <s>_R2.clean.fq.gz
+│                   <s>.fastp.{json,html}   <s>.retention.txt（修剪前后 reads 数）
+├── 03_map/         <s>.q20.bam（比对直出）  <s>.mdup.bam + .bai（后续唯一输入）
+├── 04_bamstats/    .flagstat.txt  .stats.txt  .idxstats.txt
+│                   .markdup.txt（dup rate）  .target_depth.txt（BED 平均深度）  plot/
+├── 05_variant/
+│   ├── bcftools/   .mpileup.vcf.gz → .raw.vcf.gz → .final.vcf.gz
+│   │               .snps.vcf.gz  .indels.vcf.gz  .stats.txt  plot/
+│   ├── gatk/       .rg.bam  .recal.table  .BQSR.bam  .HC.g.vcf.gz
+│   │               .HC.vcf.gz → .HC.cnn.vcf.gz → .gatk.final.vcf.gz
+│   └── deepvariant/ .dv.vcf.gz  .dv.gvcf.gz
+├── 06_annotate/    <s>.<caller>.vep.vcf.gz
+│                   <s>.<caller>.annovar.hg38_multianno.txt
+│                   <s>.<caller>.funcotated.vcf.gz + .funcotated.maf
+├── 07_report/      summary.txt（比对率 / dup / 深度 / 各 caller 统计 / 路线一致性）
+│                   igv.bat  igv.candidates.tsv  igv.*.png  multiqc/
+└── .status/*.done  断点续跑标记
+```
+
+**主产物是 `05_variant/<caller>/*.final.vcf.gz`**。注释和报告都通过 `final_vcf()`
+这一个函数取路径，所以不会出现"注释读的是旧 VCF"这种事。
 
 ## 已有环境怎么办（不想重装 GATK）
 
