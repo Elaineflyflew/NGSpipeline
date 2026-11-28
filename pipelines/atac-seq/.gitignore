@@ -1,0 +1,20 @@
+# 参考数据与外部工具：体积大、可重下，不进版本库
+reference/genome/
+reference/blacklist/
+reference/annotation/
+reference/motif/
+
+extratools/bin/
+extratools/*.tar.gz
+extratools/*.tar.bz2
+
+# 但保留说明文件
+!reference/README.md
+!extratools/README.md
+
+# 运行产物
+results/
+*.log
+.tmp/
+*.tmp
+.DS_Store

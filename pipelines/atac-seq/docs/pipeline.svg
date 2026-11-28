@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 910" width="1000" height="910" role="img" aria-labelledby="ttl dsc">
+<title id="ttl">atac-seq 流水线结构</title>
+<desc id="dsc">从双端 FASTQ 开始，经过质控、修剪、bowtie2 比对、去线粒体、Tn5 偏移校正、片段分档，再做三条路线的 peak calling，最后计算 FRiP 与 TSS 富集、生成 bigWig 与注释，输出带自动结论的汇总报告。</desc>
+
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+
+<rect x="0" y="0" width="1000" height="910" rx="10" fill="#FFFFFF"/>
+
+<text x="32" y="48" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="25" font-weight="600" fill="#111827">atac-seq</text>
+<text x="32" y="72" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" fill="#6B7280">单样本 ATAC-seq 开放染色质分析 · 15 个步骤 · 每一步都产出可核查的指标</text>
+<text x="968" y="48" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" fill="#9CA3AF">NGSpipeline / pipelines</text>
+<line x1="32" y1="90" x2="968" y2="90" stroke="#E5E7EB" stroke-width="1"/>
+
+<text x="32" y="114" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10.5" letter-spacing="1.2" fill="#9CA3AF">输入</text>
+<rect x="32" y="124" width="884" height="36" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="48" y="147" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#334155">sub20M.SRR13849313_R1.fastq.gz  +  _R2.fastq.gz</text>
+<text x="640" y="147" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="11" fill="#6B7280">2,000 万对 · 双端 · SRA 抽样</text>
+
+<line x1="52" y1="231" x2="52" y2="825" stroke="#CBD5E1" stroke-width="1.5"/>
+<line x1="52" y1="231" x2="74" y2="231" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="52" y1="377" x2="74" y2="377" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="52" y1="523" x2="74" y2="523" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="52" y1="674" x2="74" y2="674" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="52" y1="825" x2="74" y2="825" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="76" y="176" width="892" height="110" rx="10" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2"/>
+<text x="92" y="198" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="500" fill="#374151">① 上游处理 —— 质控 · 修剪 · 比对 · 过滤</text>
+
+<rect x="88" y="210" width="205" height="64" rx="7" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+<text x="102" y="232" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#1E40AF">① FastQC</text>
+<text x="102" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">原始质量 · GC · 接头</text>
+<text x="102" y="267" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">→ Q30 决定 ② 的力度</text>
+
+<rect x="309" y="210" width="205" height="64" rx="7" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+<text x="323" y="232" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#1E40AF">② fastp</text>
+<text x="323" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">去接头 · Q15 · ≥36 bp</text>
+<text x="323" y="267" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">SRA 数据可跳过</text>
+
+<rect x="530" y="210" width="205" height="64" rx="7" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+<text x="544" y="232" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#1E40AF">③ bowtie2</text>
+<text x="544" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">--local --very-fast-local</text>
+<text x="544" y="267" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">--no-mixed --no-discordant</text>
+
+<rect x="751" y="210" width="205" height="64" rx="7" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+<text x="765" y="232" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#1E40AF">④ samtools</text>
+<text x="765" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">-q 20 · 去 chrM · sort</text>
+<text x="765" y="267" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">→ srt.bam（未偏移）</text>
+
+<rect x="76" y="322" width="892" height="110" rx="10" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.2"/>
+<text x="92" y="344" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="500" fill="#374151">② Tn5 校正与片段分档</text>
+
+<rect x="88" y="356" width="277" height="64" rx="7" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+<text x="102" y="378" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#065F46">⑤ alignmentSieve</text>
+<text x="102" y="398" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">--ATACshift：正链 +4 / 负链 -5</text>
+<text x="102" y="413" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">不校正会让 footprint 整体偏 4-5 bp</text>
+
+<rect x="383" y="356" width="277" height="64" rx="7" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+<text x="397" y="378" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#065F46">⑥ sort + index</text>
+<text x="397" y="398" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">alignmentSieve 只保留前 11 列</text>
+<text x="397" y="413" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">必须重排才能给 MACS2 → srt2.bam</text>
+
+<rect x="678" y="356" width="277" height="64" rx="7" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
+<text x="692" y="378" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#065F46">⑦ TLEN 分档</text>
+<text x="692" y="398" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">NFR &lt;147 · mono 147-294 · multi</text>
+<text x="692" y="413" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#475569">★ 必须用已偏移的 srt2 才准</text>
+
+<rect x="76" y="468" width="892" height="110" rx="10" fill="#FFFFFF" stroke="#DDD6FE" stroke-width="1.2"/>
+<text x="92" y="490" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="500" fill="#374151">③ peak calling</text>
+
+<rect x="88" y="502" width="420" height="64" rx="7" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+<text x="102" y="524" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#5B21B6">⑧ MACS2 ×3</text>
+<text x="102" y="544" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#52525B">all / NFR / mono · -f BAMPE --nomodel -g hs</text>
+<text x="102" y="559" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">不加 -c；BAMPE 下 --shift 会被静默丢弃</text>
+
+<rect x="536" y="502" width="420" height="64" rx="7" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
+<text x="550" y="524" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="600" fill="#5B21B6">⑨ 去黑名单</text>
+<text x="550" y="544" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#52525B">bedtools intersect -v  ×  ENCODE blacklist v2</text>
+<text x="550" y="559" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">三份 peak 各自过滤，同时记录峰数与基因组覆盖</text>
+
+<rect x="76" y="614" width="892" height="120" rx="10" fill="#FFFFFF" stroke="#FDE68A" stroke-width="1.2"/>
+<text x="92" y="636" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="500" fill="#374151">④ 指标 · 可视化 · 注释</text>
+
+<rect x="88" y="648" width="164" height="74" rx="7" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+<text x="100" y="670" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#92400E">⑩ FRiP</text>
+<text x="100" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">bedtools coverage</text>
+<text x="100" y="702" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">+ plotEnrichment</text>
+<text x="100" y="716" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">双算法交叉验证</text>
+
+<rect x="264" y="648" width="164" height="74" rx="7" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+<text x="276" y="670" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#92400E">⑪ bigWig</text>
+<text x="276" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">bamCoverage</text>
+<text x="276" y="702" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">CPM · 去重 · 去黑名单</text>
+<text x="276" y="716" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">TSS 曲线 + fingerprint</text>
+
+<rect x="440" y="648" width="164" height="74" rx="7" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+<text x="452" y="670" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#92400E">⑫ 注释</text>
+<text x="452" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">HOMER</text>
+<text x="452" y="702" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">annotatePeaks.pl</text>
+<text x="452" y="716" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">+ bedtools closest</text>
+
+<rect x="616" y="648" width="164" height="74" rx="7" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+<text x="628" y="670" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#92400E">⑬ motif</text>
+<text x="628" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">findMotifsGenome</text>
+<text x="628" y="702" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">-mknown（不做从头）</text>
+<text x="628" y="716" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">top 1 万峰</text>
+
+<rect x="792" y="648" width="164" height="74" rx="7" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1"/>
+<text x="804" y="670" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#92400E">⑭ 片段分布</text>
+<text x="804" y="688" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">内置 awk 画 SVG</text>
+<text x="804" y="702" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">NFR / mono / multi</text>
+<text x="804" y="716" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="9.5" fill="#52525B">不需要 R</text>
+
+<rect x="76" y="770" width="892" height="110" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+<text x="92" y="792" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="500" fill="#374151">⑤ 报告 —— 把产物、指标和结论串起来</text>
+
+<rect x="88" y="804" width="277" height="64" rx="7" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1"/>
+<text x="102" y="826" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#334155">summary.txt</text>
+<text x="102" y="845" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">每个指标一行 PASS / WARN / FAIL</text>
+<text x="102" y="860" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">末尾自动给出总体结论与下一步</text>
+
+<rect x="383" y="804" width="277" height="64" rx="7" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1"/>
+<text x="397" y="826" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#334155">igv.bat</text>
+<text x="397" y="845" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">加载 BAM + bigWig + peak</text>
+<text x="397" y="860" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">定位 MYC 并截 top peak</text>
+
+<rect x="678" y="804" width="277" height="64" rx="7" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1"/>
+<text x="692" y="826" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="600" fill="#334155">metrics.tsv + multiqc</text>
+<text x="692" y="845" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">机器可读的指标表</text>
+<text x="692" y="860" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif" font-size="10" fill="#52525B">FastQC / fastp / bowtie2 合并</text>
+</svg>

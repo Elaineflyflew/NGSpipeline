@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  bin/atac-seq —— 主程序（只做调度，不写业务逻辑）
+#
+#  结构模仿 snakePipes：入口负责"读配置 → 解析参数 → 按顺序调规则"，
+#  真正的每一步都在 src/ 里，一个阶段一个文件。加一步 = 加一个文件 + 这里一行。
+# =============================================================================
+set -Eeuo pipefail
+
+# 项目根目录按脚本位置推，不依赖当前工作目录（可以在任何地方调用）
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export PROJECT_ROOT
+
+# 出错时打印是哪条命令挂的，否则 set -e 退出后什么都不说
+trap 'printf "[%s] ERROR 失败: %s\n" "$(date "+%m-%d %H:%M:%S")" "$BASH_COMMAND" >&2' ERR
+
+# 加载顺序不能变：00_common 提供 first_existing，config 依赖它探测路径
+# shellcheck source=../src/00_common.sh
+source "$PROJECT_ROOT/src/00_common.sh"
+# shellcheck source=../config/pipeline.conf
+source "$PROJECT_ROOT/config/pipeline.conf"
+# shellcheck source=../src/10_cli.sh
+source "$PROJECT_ROOT/src/10_cli.sh"
+
+parse_cli "$@"
+
+if (( LIST_STAGES )); then list_stages; exit 0; fi
+
+# 业务模块
+for _m in 20_context 30_stage_qc 31_stage_trim 32_stage_align 33_stage_bam \
+          34_stage_shift 35_stage_fraction 40_stage_peak 50_stage_metrics \
+          51_stage_bigwig 52_stage_annotate 53_stage_atacqc 60_stage_report \
+          70_preflight; do
+  # shellcheck source=/dev/null
+  source "$PROJECT_ROOT/src/${_m}.sh"
+done
+unset _m
+
+init_context
+header
+
+# ---- 预检：--check 只体检不跑数据 ----
+if (( CHECK_ONLY )); then
+  preflight && log "预检通过" || log "预检发现问题（见上）"
+  exit 0
+fi
+
+preflight >/dev/null 2>&1 || true
+
+# ---- 按顺序执行 ----
+# 每个阶段自己判断 STAGES 里有没有它、有没有 .done 标记
+maybe() {
+  local name="$1" fn="$2"
+  stage_enabled "$name" || return 0
+  run_stage "$name" "$fn"
+}
+
+maybe qc        stage_qc
+maybe trim      stage_trim
+maybe align     stage_align
+maybe bam       stage_bam
+maybe shift     stage_shift
+maybe fraction  stage_fraction
+maybe peak      stage_peak
+maybe metrics   stage_metrics
+maybe bigwig    stage_bigwig
+maybe annotate  stage_annotate
+maybe atacqc    stage_atacqc
+maybe report    stage_report
+
+section "完成"
+log "样本 ${SAMPLE} 全部阶段结束"
+log "报告: ${REP}/summary.txt"
+[[ -s "$REP/igv.bat" ]] && log "IGV : igv --batch ${REP}/igv.bat"
+exit 0

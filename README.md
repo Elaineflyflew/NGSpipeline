@@ -8,6 +8,7 @@ NGS 分析流程集合。每个流程是一个**自包含**的子目录：各自
 | 流程 | 适用数据 | 做什么 | 状态 |
 |---|---|---|---|
 | [germline-wes-wgs](pipelines/germline-wes-wgs/) | 单样本 WES / WGS | 原始 FASTQ → 质控 → 比对 → 胚系变异检测（bcftools / GATK / DeepVariant 三选或多选）→ 注释（VEP / ANNOVAR / Funcotator）→ 汇总报告 + IGV 批处理 | 可用 |
+| [atac-seq](pipelines/atac-seq/) | 单样本 ATAC-seq | 原始 FASTQ → 质控 → bowtie2 → 去线粒体 → Tn5 偏移校正 → 片段分档 → MACS2 ×3 → FRiP / TSS 富集 → bigWig → 注释与 motif → 带自动结论的报告 | 可用 |
 
 ## 目录约定
 
@@ -66,7 +67,8 @@ bin/germline-wes-wgs -1 raw/Case1_R1.fastq.gz -2 raw/Case1_R2.fastq.gz \
 ## 关于数据
 
 参考数据与外部工具动辄几十 G，全部不进版本库。根目录 `.gitignore` 用 `**/` 兜底
-忽略所有流程下的 `reference/genome|gatk_bundle|vep|funcotator` 和
-`extratools/{deepvariant,annovar,bin}`，换机器时用该流程的 `deploy/` 重新拉取。
+忽略所有流程下的 `reference/` 数据子目录和 `extratools/` 下的工具，换机器时用该流程的
+`deploy/` 重新拉取 —— 例外是 `atac-seq`，它默认不下载任何数据，直接探测机器上已有的
+参考基因组、blacklist、GTF 和 motif 库。
 
 只克隆代码的话不到 1 MB，几秒完成。
