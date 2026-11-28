@@ -1,0 +1,78 @@
+################################################################################
+# 运行参数（对应 snakePipes 的 workflows/ATACseq/defaults.yaml）
+#
+# 换机器只改 samples 的路径；换物种只改 genome 那一行。
+# 基因组相关的索引/注释路径不在这里，在 config/organisms/<genome>.yaml。
+################################################################################
+
+genome: hg38
+
+# 样本表：key 是样本名（会进所有文件名），value 是双端 FASTQ
+samples:
+  sub20M.SRR13849313:
+    r1: /public/workspace/shaojf/Course/NGS/wkdir4labs/lab9/rawdata/sub20M.SRR13849313_1.fastq.gz
+    r2: /public/workspace/shaojf/Course/NGS/wkdir4labs/lab9/rawdata/sub20M.SRR13849313_2.fastq.gz
+
+# ---------------------------- 资源 ----------------------------
+threads: 20            # 全局上限，各 rule 再按自身特性封顶
+max_thread: 20
+mem_mb: 32000
+
+# ---------------------------- 预处理 ----------------------------
+trim: true
+fastp:
+  # ATAC 不用 --trim_poly_g；-q 15 避免把 Tn5 插入位点附近的碱基削掉
+  extra: "--detect_adapter_for_pe -q 15 -u 40 -l 30"
+
+# ---------------------------- 比对 ----------------------------
+bowtie2:
+  extra: "--local --very-fast-local --no-mixed --no-discordant --phred33"
+  insert_max: 2000
+keep_sam: false        # true 则保留 SAM（作业图 ③ 的产物），代价是 ~20 GB
+
+# ---------------------------- 过滤 ----------------------------
+mapq: 20
+proper_pairs_only: true
+drop_contigs: ["chrM", "chrM_alt", "chrUn*", "*_random", "*_alt"]
+
+# ---------------------------- Tn5 校正 ----------------------------
+atac_shift: true
+
+# ---------------------------- 片段分箱 ----------------------------
+tlen:
+  nfr_max: 147
+  mono_max: 294
+
+# ---------------------------- peak calling ----------------------------
+peakCaller: MACS2
+macs2:
+  genome_size: hs
+  qvalue: 0.05
+  extra: "--nomodel --keep-dup all"
+
+# ---------------------------- FRiP ----------------------------
+frip_with_bedtools: true
+
+# ---------------------------- coverage ----------------------------
+bwBinSize: 10
+normalizeUsing: CPM
+
+# ---------------------------- TSS ----------------------------
+tss:
+  flank: 2000
+  bin_size: 25
+  score_window: 50
+
+# ---------------------------- 注释 / motif ----------------------------
+motif:
+  topn: 10000
+  size: 200
+
+# ---------------------------- ATACseqQC ----------------------------
+run_atacqc: true
+
+# ---------------------------- IGV ----------------------------
+igv:
+  locus: "chr8:127735000-127742000"    # MYC
+  width: 1400
+  height: 900

@@ -1,89 +1,134 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  src/70_preflight.sh —— 预检
+#  src/70_preflight.sh —— 跑数据前的体检
 #
-#  在真正开跑之前回答三个问题：
-#    1. 需要的软件装了没有（缺了直接说缺哪个，不要跑到一半才崩）
-#    2. 参考数据齐不齐
-#    3. 参考数据的染色体命名和数据本身一致吗（chr17 vs 17，这个坑不报错）
+#  分两半：
+#    工具   只检查"当前 STAGES 里真正会用到的"，跑 --stages peaks 时不该因为
+#           没装 ATACseqQC 就拦下来。
+#    参考   基因组 / bowtie2 索引 / GTF / 黑名单，缺一个后面都跑不通。
+#
+#  --check 时缺了只 WARN 并计数，最后统一汇报；正常运行时第一个缺就退出。
 # =============================================================================
 
-# 必需工具：缺任何一个都跑不下去
-REQ_TOOLS="fastqc fastp bowtie2 samtools macs2 bedtools"
-# 可选工具：缺了只是少做一步，主流程照样出结果
-OPT_TOOLS="multiqc alignmentSieve bamCoverage computeMatrix plotProfile plotHeatmap plotEnrichment plotFingerprint annotatePeaks.pl findMotifsGenome.pl meme-chip Rscript TOBIAS"
-
-tool_version() {
+# 每个阶段真正会用到的命令。按阶段列而不是给一条"核心命令"清单，
+# 是因为 --stages qc 时不该因为没装 bowtie2 就拦下来。
+stage_tools() {
   case "$1" in
-    fastqc)    fastqc --version 2>&1 | head -1 | sed 's/^FastQC //' ;;
-    fastp)     fastp --version 2>&1 | head -1 | sed 's/^fastp //' ;;
-    bowtie2)   bowtie2 --version 2>&1 | head -1 | awk '{print $3}' ;;
-    samtools)  samtools --version 2>&1 | head -1 | awk '{print $2}' ;;
-    macs2)     macs2 --version 2>&1 | head -1 | sed 's/^macs2 //' ;;
-    bedtools)  bedtools --version 2>&1 | head -1 | sed 's/^bedtools //' ;;
-    *)         "$1" --version 2>&1 | head -1 ;;
+    qc)       printf 'fastqc' ;;
+    trim)     printf 'fastp fastqc' ;;
+    align)    printf 'bowtie2 samtools' ;;
+    bam)      printf 'samtools' ;;
+    frag)     printf 'samtools python3' ;;
+    peaks)    printf 'macs2 samtools bedtools' ;;
+    frip)     printf 'samtools bedtools python3' ;;
+    coverage) printf 'samtools bamCoverage computeMatrix plotProfile plotFingerprint python3' ;;
+    annot)    printf 'annotatePeaks.pl python3' ;;
+    motif)    printf 'findMotifsGenome.pl python3' ;;
+    atacqc)   printf 'Rscript samtools' ;;
+    igv)      printf 'samtools' ;;
+    report)   printf 'python3 multiqc' ;;
+    *)        printf '' ;;
   esac
 }
 
+# 参考数据缺失的三种处理：dry-run 只提示 / --check 记账 / 正常运行退出
+ref_missing() {
+  local what="$1" hint="$2"
+  if (( DRY_RUN )); then
+    printf '[dry-run] 缺 %s（实际运行会报错）\n' "$what"
+    SOFT_MISSING=$(( SOFT_MISSING + 1 ))
+    return 0
+  fi
+  if (( CHECK_ONLY )); then
+    warn "缺 $what"
+    MISSING_TOOLS=$(( MISSING_TOOLS + 1 ))
+    return 0
+  fi
+  die "缺 $what —— $hint"
+}
+
 preflight() {
-  section "预检"
+  section "体检：工具与参考数据"
 
-  local t miss=0
-  printf '\n  必需工具\n'
-  printf '  %s %s %s\n' "$(pad "tool" 16)" "$(pad "status" 10)" "path / version"
-  for t in $REQ_TOOLS; do
-    local p
-    if p=$(find_tool "$t"); then
-      printf '  %s %s %s  %s\n' "$(pad "$t" 16)" "$(pad "OK" 10)" "$p" "$(tool_version "$t" 2>/dev/null)"
-    else
-      printf '  %s %s %s\n' "$(pad "$t" 16)" "$(pad "MISS" 10)" "-"
-      miss=$(( miss + 1 ))
-    fi
-  done
-  printf '\n  必需工具: %d/%d 就绪\n' "$(( 6 - miss ))" 6
+  # 按阶段取并集（13 个阶段有大量重复命令，用 seen 去重，
+  # 否则缺一个 samtools 会报六遍）
+  local t s seen=" "
+  for s in ${STAGES//,/ }; do
+    for t in $(stage_tools "$s"); do
+      case "$seen" in *" $t "*) continue ;; esac
+      seen="$seen$t "
 
-  printf '\n  可选工具\n'
-  local omiss=""
-  for t in $OPT_TOOLS; do
-    if find_tool "$t" >/dev/null 2>&1; then
-      printf '  %s %s\n' "$(pad "$t" 20)" "OK"
-    else
-      omiss="$omiss $t"
-    fi
-  done
-  [[ -n "$omiss" ]] && printf '  缺失:%s\n  缺这些只会少做对应步骤，主流程照常出结果\n' "$omiss"
-
-  printf '\n  参考数据\n'
-  local f
-  for f in "$BT2_INDEX.1.bt2:BT2_INDEX" "$FASTA:FASTA" "$BLACKLIST:BLACKLIST" \
-           "$GTF:GTF" "$HOMER_MOTIFS:HOMER_MOTIFS" "$MOTIF_DB:MOTIF_DB"; do
-    local path="${f%%:*}" name="${f#*:}"
-    if [[ -z "$path" ]]; then
-      printf '  %s %s\n' "$(pad "$name" 20)" "未找到（相关步骤会跳过）"
-    elif [[ -s "$path" ]]; then
-      printf '  %s %s  %s\n' "$(pad "$name" 20)" "OK" "$path"
-    else
-      printf '  %s %s  %s\n' "$(pad "$name" 20)" "MISS" "$path"
-    fi
+      # multiqc 是可选聚合，缺了 report 仍能出（自己生成的 HTML 才是主交付物）
+      if [[ "$t" == "multiqc" ]] && ! find_tool multiqc >/dev/null 2>&1; then
+        warn "没有 multiqc，报告里的聚合页会跳过（不影响 report.html）"
+        continue
+      fi
+      need "$t"
+    done
   done
 
-  # ---- 染色体命名一致性 ----
-  # Ensembl 的 17 和 UCSC 的 chr17 混用不会报错，但 peak 会全部落在错误的位置
-  if [[ -s "$GTF" && -s "$BLACKLIST" ]]; then
-    local g b
-    g=$(awk -F'\t' 'NR==1{print ($1 ~ /^chr/ ? "chr" : "nochr")}' "$GTF")
-    b=$(awk -F'\t' 'NR==1{print ($1 ~ /^chr/ ? "chr" : "nochr")}' "$BLACKLIST")
-    if [[ "$g" != "$b" ]]; then
-      warn "命名不一致：GTF 是 ${g}，blacklist 是 ${b} —— peak 注释和过滤都会出错"
+  # ---- 参考数据 ----
+  # dry-run 只提示、--check 记一笔、正常运行直接退出
+  #
+  # 只有 align 及之后的阶段才读基因组，只跑 qc/trim 时不该被"没有参考"拦住。
+  # 这样在没装参考的机器上也能先验一遍 ①② 两步。
+  local needs_genome=0 needs_bt2=0
+  for s in ${STAGES//,/ }; do
+    case "$s" in
+      align) needs_genome=1; needs_bt2=1 ;;
+      bam|frag|peaks|frip|coverage|annot|motif|atacqc|igv) needs_genome=1 ;;
+    esac
+  done
+
+  if (( ! needs_genome )); then
+    log "本次只跑 ${STAGES}，不读基因组"
+  elif [[ -z "$GENOME" || ! -s "$GENOME" ]]; then
+    ref_missing "基因组 fasta（reference/genome/）" "跑 deploy/deploy.sh genome，或用 -g 指定"
+  else
+    log "基因组:   $GENOME"
+  fi
+
+  if (( needs_bt2 )); then
+    if [[ -z "$BT2" ]]; then
+      ref_missing "bowtie2 索引（reference/genome/bt2/）" "跑 deploy/deploy.sh bt2"
     else
-      printf '\n  染色体命名: %s（GTF 与 blacklist 一致）\n' "$g"
+      # 只查 .1.bt2 不够：缺 rev.1/rev.2 时 bowtie2 会 segfault 而不是报错
+      need_bt2 "$BT2"
+      log "bt2 索引: $BT2"
     fi
   fi
 
-  if (( CHECK_ONLY && miss > 0 )); then
-    printf '\n  缺 %d 个必需工具，跑 deploy/deploy.sh env 补装\n\n' "$miss"
-    return 1
+  # GTF 只有 ⑪ 的 TSS 富集要用；黑名单只有 ⑧⑨ 和 ⑪ 要用。用不上就别念
+  if stage_enabled coverage; then
+    if [[ -z "$GTF" ]]; then
+      warn "没找到 GTF，⑪ 的 TSS 富集会被跳过（deploy/deploy.sh annotation）"
+    else
+      log "GTF:      $GTF"
+    fi
   fi
-  printf '\n'
-  return 0
+
+  if stage_enabled peaks || stage_enabled coverage; then
+    if [[ -z "$BLACKLIST" ]]; then
+      warn "没找到黑名单 BED，⑨ 会退化成“原样拷贝”（deploy/deploy.sh blacklist）"
+    else
+      log "黑名单:   $BLACKLIST"
+    fi
+  fi
+
+  # ---- 两条可选链路 ----
+  if stage_enabled igv; then
+    if find_tool igv >/dev/null 2>&1 || find_tool pyGenomeTracks >/dev/null 2>&1; then
+      log "IGV 路线: $(find_tool igv 2>/dev/null || find_tool pyGenomeTracks)"
+    else
+      warn "igv 和 pyGenomeTracks 都没有，⑮ 只会生成 batch 文件"
+    fi
+  fi
+
+  if (( MISSING_TOOLS > 0 )); then
+    warn "共缺 ${MISSING_TOOLS} 项（见上）"
+  elif (( SOFT_MISSING > 0 )); then
+    warn "dry-run：另有 ${SOFT_MISSING} 项参考数据缺失，实际运行会在这里停下（见上）"
+  else
+    ok "工具与参考数据齐全"
+  fi
 }

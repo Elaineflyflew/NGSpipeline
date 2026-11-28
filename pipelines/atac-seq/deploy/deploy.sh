@@ -1,117 +1,234 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  deploy/deploy.sh —— 依赖体检与安装
+#  deploy/deploy.sh —— 依赖安装总入口
 #
-#  这个流程默认【不下载任何数据】：参考基因组、索引、blacklist、GTF、motif 库
-#  都从 config/genomes/<name>.conf 里探测，服务器上已有的直接复用。
+#    bash deploy/deploy.sh status         # 先看现在有什么、缺什么、占多大
+#    bash deploy/deploy.sh all            # 装齐
+#    bash deploy/deploy.sh genome bt2     # 只装指定几项
+#    bash deploy/deploy.sh --dry-run all  # 只打印要下载什么，不实际下
 #
-#  所以 deploy 只做两件事：
-#    doctor  看装了什么、缺什么
-#    env     缺的软件用 conda 补（不重建环境，不覆盖已有版本）
-#    status  看参考数据都指到哪了
-#
-#  用法
-#    bash deploy/deploy.sh doctor
-#    bash deploy/deploy.sh status
-#    bash deploy/deploy.sh env
-#    bash deploy/deploy.sh all
+#  单项：env genome bt2 annotation blacklist homer atacqc igv
 # =============================================================================
-set -Eeuo pipefail
+set -euo pipefail
 
-# shellcheck source=lib.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=/dev/null
+source "$SELF_DIR/lib.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/00_doctor.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/10_ref_genome.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/15_annotation.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/20_blacklist.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/30_homer.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/40_atacqc.sh"
+# shellcheck source=/dev/null
+source "$SELF_DIR/50_igv.sh"
 
 usage() {
 cat <<EOF
-atac-seq deploy
+deploy.sh —— 安装 ATAC-seq 流水线的参考数据与外部工具
 
-用法: bash deploy/deploy.sh <命令>
+用法
+  bash deploy/deploy.sh [选项] <目标>...
 
-  doctor    软件体检：必需/可选工具装了什么、缺什么
-  status    参考数据：每个路径指向哪里、大小多少
-  env       只补装缺失的必需工具（不重建环境）
-  all       env + 打印后续步骤
+目标
+  doctor        软件体检：本机已装了什么、还缺什么（不改动任何东西）
+  status        数据体检：参考数据装了哪些、占多大
+  all           全部安装
+  env           只补装缺失的软件（已有的不重装；全都有则跳过）
+  genome        参考基因组 fasta + .fai                     ~1.0G
+  bt2           bowtie2 索引                                ~4.5G（建索引约 1 小时）
+  annotation    GENCODE v${GENCODE_RELEASE} GTF             ~1.5G
+  blacklist     ENCODE hg38 blacklist v2                    ~1M
+  homer         HOMER 本体 + hg38 数据                      ~3G
+  atacqc        R / Bioconductor ATACseqQC（可选）          ~1G
+  igv           IGV 解压到 extratools/（可选）              ~200M
 
-环境变量
-  ENV_NAME   conda 环境名（默认 wes，和课程其他流程共用）
-  CONDA_EXE  conda 可执行文件（默认自动找）
+选项
+  --dry-run       只打印要下载/安装什么，不实际执行
+  --force         已存在的也重新下载/重建
+  --with-optional env 时连 multiqc / igv / pygenometracks 一起装
+  -h, --help
+
+关于软件
+  fastqc / fastp / bowtie2 / samtools / bedtools / macs2 / deeptools 不强制用
+  conda 装。deploy 会先探测 PATH、extratools/bin、\$CONDA_PREFIX 以及常见的
+  miniforge/mambaforge/miniconda/anaconda 环境目录，已经有的直接复用，只补缺失的。
+
+常用组合
+  bash deploy/deploy.sh doctor              # 第一步永远先跑这个
+  bash deploy/deploy.sh genome bt2 annotation blacklist
+  bash deploy/deploy.sh homer               # 要 ⑫⑬ 才装
+  bash deploy/deploy.sh --dry-run all       # 上服务器前先看清楚要下多少
+
+下载源
+  基因组     ${UCSC_BASE}
+  GTF        ${GENCODE_BASE}/release_${GENCODE_RELEASE}
+  黑名单     GitHub Boyle-Lab/Blacklist
+  HOMER      ${HOMER_BASE}
+  IGV        ${IGV_BASE}
+  全部可用环境变量覆盖，见各子脚本顶部的 *_BASE / *_RELEASE / *_VERSION
 EOF
 }
 
-cmd_status() {
-  section "参考数据"
-  printf '  %s %s\n' "$(pad "genome" 12)" "$GENOME_LABEL ($GENOME_NAME)"
-  printf '  %s %s\n' "$(pad "config" 12)" "$PROJECT_ROOT/config/genomes/${GENOME}.conf"
-  echo
-  printf '  %s %s %s\n' "$(pad "item" 14)" "$(pad "size" 10)" "path"
-  local pair name path
-  for pair in "BT2_INDEX:$BT2_INDEX" "FASTA:$FASTA" "BLACKLIST:$BLACKLIST" \
-              "GTF:$GTF" "HOMER_MOTIFS:$HOMER_MOTIFS" "MOTIF_DB:$MOTIF_DB"; do
-    name="${pair%%:*}"; path="${pair#*:}"
-    if [[ -z "$path" ]]; then
-      printf '  %s %s %s\n' "$(pad "$name" 14)" "$(pad "-" 10)" "未找到"
-    elif [[ -e "$path" ]]; then
-      printf '  %s %s %s\n' "$(pad "$name" 14)" "$(pad "$(human_size "$path")" 10)" "$path"
+deploy_env() {
+  # 先体检：已有的工具一个都不动，只补缺的
+  deploy_doctor --quiet >/dev/null
+  local pkgs; pkgs=$(deploy_env_pkgs)
+
+  if [[ -z "${pkgs// /}" ]]; then
+    log "必需工具已全部就绪，跳过 conda 安装"
+    return 0
+  fi
+
+  log "缺失的 conda 包: $pkgs"
+
+  local mgr="conda"
+  command -v mamba >/dev/null 2>&1 && mgr="mamba"
+
+  if (( DRY_RUN )); then
+    if conda env list 2>/dev/null | awk '{print $1}' | grep -qx "atac"; then
+      printf '[dry-run] %s install -y -n atac -c conda-forge -c bioconda %s\n' "$mgr" "$pkgs"
     else
-      printf '  %s %s %s\n' "$(pad "$name" 14)" "$(pad "-" 10)" "路径不存在: $path"
+      printf '[dry-run] %s env create -f env/environment.missing.yaml\n' "$mgr"
+      printf '           其中依赖: %s\n' "$pkgs"
     fi
-  done
-  echo
-  echo "  这些路径全部来自 config/genomes/${GENOME_NAME}.conf，按候选顺序取第一个存在的。"
-  echo "  想换位置：export BT2_INDEX=... 或 --bt2-index ..."
-}
-
-cmd_env() {
-  local missing="" t
-  for t in $REQ_TOOLS; do
-    find_tool "$t" >/dev/null 2>&1 || missing="$missing $t"
-  done
-
-  if [[ -z "$missing" ]]; then
-    log "必需工具全部就绪，什么都不用装"
     return 0
   fi
 
-  log "缺少:$missing"
+  command -v "$mgr" >/dev/null 2>&1 || die "没有 conda/mamba。请先装 miniforge，或手动安装:$pkgs"
 
-  local pkgs="" p
-  for t in $missing; do
-    if conda_has "$t"; then
-      p=$(pkg_for "$t")
-      case " $pkgs " in *" $p "*) ;; *) pkgs="$pkgs $p" ;; esac
-    else
-      warn "$t 不在 conda 默认渠道里，需要手动装"
+  if conda env list 2>/dev/null | awk '{print $1}' | grep -qx "atac"; then
+    log "环境 atac 已存在，只往里补装缺失的包"
+    "$mgr" install -y -n atac -c conda-forge -c bioconda $pkgs
+  else
+    local out="$PROJECT_ROOT/env/environment.missing.yaml"
+    {
+      printf 'name: atac\nchannels:\n  - conda-forge\n  - bioconda\n  - defaults\ndependencies:\n'
+      local p
+      for p in $pkgs; do printf '  - %s\n' "$p"; done
+    } > "$out"
+    log "按缺失清单创建环境 atac: $out"
+    "$mgr" env create -f "$out"
+  fi
+
+  log "完成。激活后即可使用: conda activate atac"
+  log "注意：本机原有环境里的工具不会被搬进来，pipeline 运行时会自动从原位置找到它们"
+}
+
+deploy_status() {
+  printf '\n%s %s %s\n' "$(pad "项目" 20)" "$(pad "状态" 12)" "路径 / 大小"
+  printf '%s\n' "--------------------------------------------------------------------------"
+
+  local fa; fa=$(find_genome)
+  if [[ -n "$fa" ]]; then
+    row "参考基因组" "OK" "$fa ($(human_size "$fa"))"
+    [[ -s "$fa.fai" ]] || row "" "索引不全" "缺 .fai（samtools faidx）"
+  else
+    row "参考基因组" "缺失" "bash deploy/deploy.sh genome"
+  fi
+
+  local bt2; bt2=$(find_bt2)
+  if [[ -n "$bt2" ]]; then
+    row "bowtie2 索引" "OK" "$bt2 ($(human_size "$BT2_DIR"))"
+  else
+    row "bowtie2 索引" "缺失" "bash deploy/deploy.sh bt2"
+  fi
+
+  local gtf; gtf=$(discover_one "$ANN_DIR" '*.gtf' '*.gtf.gz')
+  if [[ -n "$gtf" ]]; then
+    row "基因注释 GTF" "OK" "$gtf ($(human_size "$gtf"))"
+  else
+    row "基因注释 GTF" "缺失" "bash deploy/deploy.sh annotation"
+  fi
+
+  local bl; bl=$(discover_one "$BL_DIR" '*.bed' '*.bed.gz')
+  if [[ -n "$bl" ]]; then
+    row "ENCODE 黑名单" "OK" "$bl ($(wc -l < "$bl" 2>/dev/null || echo 0) 个区间)"
+  else
+    row "ENCODE 黑名单" "缺失" "bash deploy/deploy.sh blacklist"
+  fi
+
+  if [[ -d "$HOMER_DIR/data/genomes/hg38" ]]; then
+    row "HOMER + hg38" "OK" "$(human_size "$HOMER_DIR")"
+  else
+    row "HOMER + hg38" "缺失" "bash deploy/deploy.sh homer"
+  fi
+
+  if (( DRY_RUN )) || Rscript -e \
+      'if (!requireNamespace("ATACseqQC", quietly=TRUE)) quit(status=1)' >/dev/null 2>&1; then
+    row "ATACseqQC" "OK" "R 包可用"
+  else
+    row "ATACseqQC" "可选缺失" "bash deploy/deploy.sh atacqc"
+  fi
+
+  if find_tool igv >/dev/null 2>&1 || find_tool pyGenomeTracks >/dev/null 2>&1; then
+    row "截图工具" "OK" "$(find_tool igv 2>/dev/null || find_tool pyGenomeTracks)"
+  else
+    row "截图工具" "可选缺失" "bash deploy/deploy.sh igv"
+  fi
+
+  deploy_doctor --quiet >/dev/null 2>&1 || true
+  if (( DOCTOR_REQ_MISSING == 0 )); then
+    row "软件" "OK" "${DOCTOR_REQ_OK} 个必需工具就绪（复用本机已装）"
+  else
+    row "软件" "缺失(${DOCTOR_REQ_MISSING})" "${DOCTOR_MISS_REQ# } → bash deploy/deploy.sh env"
+  fi
+
+  printf '\n项目根目录: %s\n' "$PROJECT_ROOT"
+  printf '看每个工具的路径: bash deploy/deploy.sh doctor\n\n'
+}
+
+_run_one() {
+  case "$1" in
+    doctor)     deploy_doctor; STATUS_ONLY=1 ;;
+    status)     deploy_status; STATUS_ONLY=1 ;;
+    env)        deploy_env ;;
+    genome)     deploy_genome ;;
+    bt2)        deploy_bt2 ;;
+    annotation) deploy_annotation ;;
+    blacklist)  deploy_blacklist ;;
+    homer)      deploy_homer ;;
+    atacqc)     deploy_atacqc ;;
+    igv)        deploy_igv ;;
+    *) die "未知目标: $1（可用: doctor status env genome bt2 annotation blacklist homer atacqc igv all）" ;;
+  esac
+}
+
+main() {
+  local -a targets=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) DRY_RUN=1; shift ;;
+      --force)   FORCE=1; shift ;;
+      --with-optional) ENV_WITH_OPT=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*)        die "未知选项: $1" ;;
+      *)         targets+=("$1"); shift ;;
+    esac
+  done
+  [[ ${#targets[@]} -gt 0 ]] || { usage; exit 2; }
+
+  local t
+  for t in "${targets[@]}"; do
+    if [[ "$t" == "all" ]]; then
+      deploy_doctor
+      # 顺序有讲究：先小后大，网络中断时至少小文件是完整的
+      for t in env blacklist annotation genome bt2 homer atacqc igv; do
+        _run_one "$t"
+      done
+      break
     fi
+    _run_one "$t"
   done
 
-  if [[ -z "$pkgs" ]]; then
-    warn "没有可自动安装的包，请手动处理上面列出的工具"
-    return 0
-  fi
-
-  local conda_exe="${CONDA_EXE:-}"
-  [[ -z "$conda_exe" ]] && conda_exe=$(command -v conda 2>/dev/null || true)
-  if [[ -z "$conda_exe" ]]; then
-    warn "找不到 conda，请手动安装:$pkgs"
-    return 0
-  fi
-
-  local env_name="${ENV_NAME:-wes}"
-  echo
-  log "安装到 conda 环境: $env_name"
-  log "包:$pkgs"
-  run "$conda_exe" install -y -n "$env_name" -c conda-forge -c bioconda $pkgs
+  (( DRY_RUN )) && log "（dry-run 模式，未实际下载）"
+  (( ${STATUS_ONLY:-0} )) || log "完成。查看状态: bash deploy/deploy.sh status"
 }
 
-cmd_doctor() {
-  preflight
-}
-
-case "${1:-}" in
-  doctor) cmd_doctor ;;
-  status) cmd_status ;;
-  env)    cmd_env ;;
-  all)    cmd_env; echo; cmd_status ;;
-  -h|--help|"") usage ;;
-  *) usage >&2; die "未知命令: $1" ;;
-esac
+main "$@"

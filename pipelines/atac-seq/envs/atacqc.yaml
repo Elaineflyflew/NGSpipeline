@@ -1,0 +1,16 @@
+################################################################################
+# ⑭ ATACseqQC 专用环境（R + Bioconductor，依赖重，单独隔离）
+#
+# 这一步失败不该影响主链：⑪ 已经给出同口径的 TSS 富集数值，
+# ⑦ 已经给出同口径的片段分布。
+################################################################################
+name: lab9-atacqc
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.3.*
+  - bioconductor-atacseqqc
+  - bioconductor-txdb.hsapiens.ucsc.hg38.knowngene
+  - bioconductor-genomicalignments
+  - bioconductor-rsamtools

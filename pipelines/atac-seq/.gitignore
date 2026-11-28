@@ -1,20 +1,42 @@
-# 参考数据与外部工具：体积大、可重下，不进版本库
-reference/genome/
-reference/blacklist/
-reference/annotation/
-reference/motif/
-
-extratools/bin/
-extratools/*.tar.gz
-extratools/*.tar.bz2
-
-# 但保留说明文件
-!reference/README.md
-!extratools/README.md
-
 # 运行产物
 results/
-*.log
-.tmp/
-*.tmp
+logs/
+
+# Snakemake
+.snakemake/
+
+# 参考数据与外部工具：几十 G，不进版本库，换机器用 deploy/ 重新拉
+reference/*
+!reference/README.md
+extratools/*
+!extratools/README.md
+
+# deploy 生成的缺失清单
+env/environment.missing.yaml
+
+# 中间文件
+*.bam
+*.bai
+*.sam
+*.cram
+*.bw
+*.bigwig
+*.narrowPeak
+*.gappedPeak
+*.bedgraph
+*.fastq.gz
+*.fq.gz
+*.fasta
+*.fa
+*.fa.fai
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# 编辑器 / 系统
 .DS_Store
+.vscode/
+.idea/
+*.swp

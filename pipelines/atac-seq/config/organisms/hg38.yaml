@@ -1,0 +1,26 @@
+################################################################################
+# 基因组配置（对应 snakePipes 的 shared/organisms/hg38.yaml）
+#
+# 只放"这个基因组在哪"，不放"怎么分析"。换 hg19/mm10 就复制一份改这里。
+################################################################################
+
+genome_size: 2900338458
+
+# bowtie2 索引前缀（不带 .1.bt2）
+bowtie2_index: "/public/workspace/shaojf/Course/NGS/wkdir4labs/lab9/refs/hg38"
+
+# 基因组 fasta（HOMER 建索引、pyGenomeTracks 用）
+genome_fasta: "/public/storage/shaojf/Course/NGS/wkdir4labs/lab11/refs/hg38.fa"
+
+# 注释
+genes_gtf: "/public/storage/shaojf/Course/NGS/wkdir4labs/lab10/refs/gencode.v43.annotation.gtf"
+
+# ENCODE hg38 v2 黑名单
+blacklist_bed: "/public/storage/shaojf/Course/NGS/Reference/ENCODE/blacklist.v2/hg38-blacklist.v2.bed"
+
+# HOMER 已安装的基因组名（configureHomer.pl -install hg38 之后的名字）
+homer_genome: "hg38"
+homer_known_motifs: "/home/biotools/miniforge3/envs/motif/share/homer/data/knownTFs/known.motifs"
+
+# bigWig 归一化时忽略的 contig（着丝粒/端粒等高拷贝区），留空则不忽略
+ignoreForNormalization: ""

@@ -1,0 +1,23 @@
+################################################################################
+# 主分析环境（--use-conda 时每个 rule 会自动建/复用这个环境）
+#
+# 如果你服务器上已经有这些工具（课程镜像 /bioapps/bin），
+# 直接 `snakemake` 不加 --use-conda 即可，这个文件不会被用到。
+################################################################################
+name: lab9-atac
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - fastqc=0.12.*
+  - fastp=0.23.*
+  - bowtie2=2.5.*
+  - samtools=1.19.*
+  - bedtools=2.31.*
+  - macs2=2.2.9.*
+  - deeptools=3.5.*
+  - homer=4.11
+  - multiqc=1.21.*
+  - python=3.11
+  - matplotlib=3.8.*
+  - pygenometracks

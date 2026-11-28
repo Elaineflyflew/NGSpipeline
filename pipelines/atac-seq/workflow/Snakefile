@@ -1,0 +1,141 @@
+################################################################################
+# Lab9 ATAC-seq —— Snakemake 工作流
+#
+# 结构照着 snakePipes 来：
+#   workflow/Snakefile            入口，只负责装配
+#   workflow/rules/*.smk          按主题拆规则（对应 shared/rules/）
+#   config/config.yaml            运行参数（对应 workflows/ATACseq/defaults.yaml）
+#   config/organisms/hg38.yaml    基因组路径（对应 shared/organisms/hg38.yaml）
+#   envs/*.yaml                   conda 环境（对应 shared/rules/envs/）
+#
+# 每条 rule 都带 log / benchmark / threads，跑完可以回答"哪一步慢、耗多少内存"，
+# 这是 snakePipes 最值得抄的一点：过程数据比结果更早暴露问题。
+#
+# 运行：
+#   bash run_workflow.sh                      # 包装脚本，自动带参数
+#   snakemake -s workflow/Snakefile -j 20 --configfile config/config.yaml
+################################################################################
+
+import os
+
+from snakemake.utils import min_version
+
+min_version("7.32")
+
+PROJECT_ROOT = os.path.dirname(workflow.basedir)
+workdir: PROJECT_ROOT
+
+configfile: "config/config.yaml"
+
+# ---------------------------------------------------------------------------
+# 全局通配符约束
+#
+# Snakemake 默认允许 {sample} 里带 "/"。这会让 fastqc_raw 的
+# results/01_fastqc/{sample}_R1_fastqc.html 把 fastqc_clean 的
+# results/01_fastqc/clean/<sample>_clean_R1_fastqc.html 也吃掉
+# （sample 被解成 "clean/xxx_clean"），报 AmbiguousRuleException。
+# 样本名里本来就不会有斜杠，全局钉死即可。
+# ---------------------------------------------------------------------------
+wildcard_constraints:
+    sample = "[^/]+"
+
+# ---------------------------------------------------------------------------
+# 基因组配置单独一个文件：换物种/换版本只换这一行，不动运行参数
+# （snakePipes 用 shared/organisms/<genome>.yaml 做的同一件事）
+#
+# config 里给了 organism_file 就直接用它（离线自测、或基因组 yaml 放在别处时用）；
+# 否则按 genome 名字到 config/organisms/ 下找。
+# ---------------------------------------------------------------------------
+import yaml
+
+ORGANISM_FILE = config.get("organism_file") or os.path.join(
+    PROJECT_ROOT, "config", "organisms", "%s.yaml" % config["genome"]
+)
+if os.path.exists(ORGANISM_FILE):
+    with open(ORGANISM_FILE) as fh:
+        globals().update(yaml.safe_load(fh) or {})
+else:
+    raise FileNotFoundError(
+        "找不到基因组配置 %s\n"
+        "照着 config/organisms/hg38.yaml 复制一份，填上你自己的路径。" % ORGANISM_FILE
+    )
+
+include: "rules/00_common.smk"
+include: "rules/01_preprocess.smk"
+include: "rules/02_align.smk"
+include: "rules/03_peaks.smk"
+include: "rules/04_qc.smk"
+include: "rules/05_annotate.smk"
+include: "rules/06_report.smk"
+
+
+################################################################################
+# 参考文件体检
+#
+# 不检查的后果：跑到第 ③ 步 bowtie2 才报 "index not found"，或者更糟——
+# 跑到第 ⑨ 步才因为黑名单路径写错而失败，前面一小时白跑。
+# 这里在 DAG 构建阶段一次性把缺的文件全列出来。
+################################################################################
+def _check_refs():
+    required = [
+        ("bowtie2 索引", bowtie2_index + ".1.bt2"),
+        ("基因组 fasta", genome_fasta),
+        ("基因注释 GTF", genes_gtf),
+        ("ENCODE 黑名单", blacklist_bed),
+    ]
+    if homer_available():
+        required.append(("HOMER known.motifs", homer_known_motifs))
+
+    missing = [(label, path) for label, path in required if not os.path.exists(path)]
+    if missing:
+        lines = ["参考文件缺失（来自 %s）：" % ORGANISM_FILE]
+        for label, path in missing:
+            lines.append("  · %s：%s" % (label, path))
+        lines.append("")
+        lines.append("改 config/organisms/%s.yaml 里的路径，或先确认挂载点是否可用。"
+                     % config["genome"])
+        raise FileNotFoundError("\n".join(lines))
+
+
+_check_refs()
+
+
+rule all:
+    input:
+        # ① ②
+        expand(res(D_QC, "{sample}_R1_fastqc.html"), sample=SAMPLES),
+        expand(res(D_TRIM, "{sample}.fastp.html"), sample=SAMPLES),
+        expand(res(D_QC, "clean", "{sample}_clean_R1_fastqc.html"), sample=SAMPLES),
+        # ③④⑤⑥
+        expand(res(D_BAM, "{sample}.srt2.bam"), sample=SAMPLES),
+        expand(res(D_BAM, "{sample}.srt2.bam.bai"), sample=SAMPLES),
+        # ⑦
+        expand(res(D_FRAG, "{sample}.fragsize_dist.png"), sample=SAMPLES),
+        # ⑧⑨
+        expand(res(D_PEAK, "{sample}.{frac}.filtered.narrowPeak"),
+               sample=SAMPLES, frac=FRACTIONS),
+        # ⑩⑪
+        expand(res(D_FRIP, "{sample}", "{frac}.frip.tsv"), sample=SAMPLES, frac=FRACTIONS),
+        expand(res(D_FRIP, "{sample}.plotFingerprint.png"), sample=SAMPLES),
+        expand(res(D_COV, "{sample}.bamCoverage.bw"), sample=SAMPLES),
+        expand(res(D_TSS, "{sample}.tss_score.tsv"), sample=SAMPLES),
+        expand(res(D_TSS, "{sample}.tss_profile.pdf"), sample=SAMPLES),
+        # ⑫⑬
+        *annot_targets(),
+        # ⑭
+        *atacqc_targets(),
+        # ⑮
+        *igv_targets(),
+        # 汇总
+        res(D_REPORT, "summary.tsv"),
+        res(D_REPORT, "report.html"),
+        *multiqc_targets(),
+
+
+onsuccess:
+    print("\n%s\n ATAC-seq 工作流完成 → results/99_report/report.html\n%s"
+          % ("=" * 70, "=" * 70))
+
+onerror:
+    print("\n!!! ATAC-seq 工作流在第 %s 步失败，看 .benchmark/ 和 logs/ 下的日志 !!!\n"
+          % jobid)

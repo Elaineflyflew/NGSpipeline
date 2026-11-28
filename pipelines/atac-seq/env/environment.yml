@@ -1,0 +1,54 @@
+################################################################################
+# 一条命令建好全部依赖（Linux x86_64 / 也支持 osx-arm64，但 HOMER 只有 Linux 版）
+#
+#   conda env create -f env/environment.yml
+#   conda activate atac
+#
+# 如果服务器已经装好了大部分工具（比如课程镜像里的 /bioapps/bin），
+# 不用建这个环境，直接跑 bin/atac --check 看缺什么补什么。
+################################################################################
+name: atac
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  # ---- 预处理 ----
+  - fastqc=0.12.*
+  - fastp=0.23.*
+
+  # ---- 比对与 BAM 操作 ----
+  - bowtie2=2.5.*
+  - samtools=1.19.*      # >=1.13 才支持 view -e 过滤表达式
+  - bedtools=2.31.*
+
+  # ---- peak calling ----
+  - macs2=2.2.9.*
+
+  # ---- 信号与 QC ----
+  - deeptools=3.5.*      # bamCoverage / computeMatrix / plotProfile / plotEnrichment
+  - subread              # 备用：featureCounts 统计 peak 内 reads
+  - preseq               # 文库复杂度（可选）
+
+  # ---- 注释与 motif ----
+  - homer=4.11           # annotatePeaks.pl / findMotifsGenome.pl（仅 Linux）
+  - meme                 # 可选：meme-chip 做 de novo motif
+
+  # ---- 汇总 ----
+  - multiqc=1.21.*
+
+  # ---- 脚本依赖 ----
+  - python=3.11
+  - matplotlib=3.8.*     # 片段分布图 / 注释分布图
+  - pyBigWig             # 备用
+
+  # ---- ATACseqQC（⑭）----
+  - bioconductor-atacseqqc
+  - bioconductor-txdb.hsapiens.ucsc.hg38.knowngene
+  - bioconductor-genomicalignments
+  - r-base=4.3.*
+
+  # ---- 可选：没有 IGV 时用它出轨道图 ----
+  - pygenometracks
