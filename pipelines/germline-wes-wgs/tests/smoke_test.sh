@@ -124,7 +124,11 @@ expect_has "--force 后真的打印命令" "fastqc"
 # ---------------------------------------------------------------- 5. 预检
 printf '\n[5] 预检\n'
 # --check 的退出码取决于本机装了什么，这里只验证它能跑完并如实汇报
-LAST_OUT=$("$PIPE" "${FASTQ[@]}" "${COMMON[@]}" -o "$T/out4" --check 2>&1) || true
+# "缺工具时怎么报"必须用空桩测：直接跑的话，本机装了什么就报什么，
+# 在工具齐全的服务器上这条永远测不出来（会假红）。
+mkdir -p "$T/nobin"
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 EXTRA_PATH=/nonexistent PATH="$T/nobin:/usr/bin:/bin" \
+           "$PIPE" "${FASTQ[@]}" "${COMMON[@]}" -o "$T/out4" --check 2>&1) || true
 ok "--check 能跑完（不因缺工具中断）"
 expect_has "预检打印参数" "样本="
 expect_has "如实汇报缺失项" "缺少命令"
@@ -134,7 +138,8 @@ if [[ -z "$(ls -A "$T/out4/01_qc" 2>/dev/null)" ]]; then ok "--check 未产生�
 printf '\n[6] deploy（dry-run）\n'
 expect "deploy 帮助" 0 "$DEPLOY" -h
 expect "deploy status" 0 "$DEPLOY" status
-expect "deploy --dry-run ref" 0 "$DEPLOY" --dry-run ref
+# 指向空目录：本机已经放好参考基因组时 deploy 会直接跳过，就测不到下载逻辑了
+expect "deploy --dry-run ref" 0 env GENOME_DIR="$T/emptyref" "$DEPLOY" --dry-run ref
 expect_has "打印了下载地址" "storage.googleapis.com"
 expect "deploy 未知目标报错" 1 "$DEPLOY" bogus
 
@@ -236,6 +241,9 @@ printf '\n[9] 软件体检：先看已有什么，再决定装什么\n'
 
 expect "doctor 能跑" 0 "$DEPLOY" doctor
 expect_has "doctor 打印表头" "工具"
+# 同上：空桩里测"缺了会怎么提示"，不依赖本机是否装齐
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 EXTRA_PATH=/nonexistent \
+           PATH="$T/nobin:/usr/bin:/bin" "$DEPLOY" doctor 2>&1) || true
 expect_has "doctor 给出缺失建议" "deploy.sh env"
 
 # 造一套"已装好"的假工具，验证不会重复安装
@@ -244,16 +252,16 @@ for t in gatk samtools bwa bcftools fastqc fastp bgzip tabix; do
   printf '#!/bin/sh\nexit 0\n' > "$T/bin/$t"; chmod +x "$T/bin/$t"
 done
 
-LAST_OUT=$(PATH="$T/bin:$PATH" "$DEPLOY" doctor 2>&1) || true
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" doctor 2>&1) || true
 expect_has "必需工具齐全时报 8/8" "8/8"
 expect_has "齐全时明确说不需要 conda" "不需要 conda"
 
-LAST_OUT=$(PATH="$T/bin:$PATH" "$DEPLOY" --dry-run env 2>&1) || true
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" --dry-run env 2>&1) || true
 expect_has "env 遇到齐全环境直接跳过" "跳过 conda"
 
 # 缺一个时只补那一个
 rm -f "$T/bin/gatk"
-LAST_OUT=$(PATH="$T/bin:$PATH" "$DEPLOY" --dry-run env 2>&1) || true
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" --dry-run env 2>&1) || true
 expect_has "只缺 gatk 时只装 gatk4" "gatk4"
 if printf '%s' "$LAST_OUT" | grep -qE '(^| )bwa( |$)'; then
   bad "只补缺失项（不应重复装 bwa）" "输出里出现了 bwa"
@@ -264,7 +272,7 @@ fi
 # status 的"软件"行必须和 doctor 同一口径：有工具就算 OK，
 # 不再因为不存在名为 wes 的 conda 环境而报缺失（工具在 /bioapps/bin 里很正常）
 printf '#!/bin/sh\nexit 0\n' > "$T/bin/gatk"; chmod +x "$T/bin/gatk"
-LAST_OUT=$(PATH="$T/bin:$PATH" "$DEPLOY" status 2>&1) || true
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" status 2>&1) || true
 expect_has "status 报软件就绪" "必需工具就绪"
 if printf '%s' "$LAST_OUT" | grep -q "conda 环境"; then
   bad "status 不再要求 conda 环境" "仍出现 'conda 环境'"
@@ -274,7 +282,7 @@ fi
 
 # 缺工具时 status 要如实报缺，并指到 env
 rm -f "$T/bin/gatk"
-LAST_OUT=$(PATH="$T/bin:$PATH" "$DEPLOY" status 2>&1) || true
+LAST_OUT=$(TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" status 2>&1) || true
 expect_has "status 缺工具时报缺失" "缺失(1)"
 expect_has "status 指到 env 补装" "deploy.sh env"
 
@@ -285,7 +293,7 @@ ln -sf "$T/gsrc/big.fa" "$T/gdir/my_ref.fa"
 printf 'chr17\t8\t0\t8\t9\n' > "$T/gdir/my_ref.fa.fai"
 printf 'x\n' > "$T/gdir/my_ref.dict"
 printf 'x\n' > "$T/gdir/my_ref.fa.bwt"
-LAST_OUT=$(GENOME_DIR="$T/gdir" PATH="$T/bin:$PATH" "$DEPLOY" status 2>&1) || true
+LAST_OUT=$(GENOME_DIR="$T/gdir" TOOL_SEARCH_DISABLE=1 PATH="$T/bin:/usr/bin:/bin" "$DEPLOY" status 2>&1) || true
 if printf '%s' "$LAST_OUT" | grep -q "my_ref.fa (2.0M)"; then
   ok "软链接参考基因组显示真实大小（不是 0）"
 else

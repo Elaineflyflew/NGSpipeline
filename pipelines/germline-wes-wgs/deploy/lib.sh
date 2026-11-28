@@ -91,12 +91,18 @@ dl_tar() {
 
 # 简单的空间检查：下载前提醒，避免下到一半 No space left
 check_space() {
-  local need_gb="$1" dir="$2" avail
-  avail=$(df -g "$dir" 2>/dev/null | awk 'NR==2{print $4}')
+  local need_gb="$1" dir="$2" avail=""
+  mkdir -p "$dir" 2>/dev/null || true
+  # 不能用 df -g：那是 BSD/macOS 的参数，Linux 的 df 直接报错。而 deploy.sh 开着
+  # pipefail，df 一失败，`avail=$(... | awk)` 这条赋值就跟着失败，set -e 会让整个
+  # 脚本**静默退出**（连 ERROR 都不打）—— 在服务器上跑 deploy ref 就是这个症状。
+  # 改用 POSIX 的 -Pk（千字节块），再自己换算成 G。
+  avail=$(df -Pk "$dir" 2>/dev/null | awk 'NR==2{printf "%d", $4/1048576}') || avail=""
   [[ -z "$avail" ]] && return 0
   if (( avail < need_gb )); then
     warn "$dir 剩余 ${avail}G，本步骤大约需要 ${need_gb}G"
   fi
+  return 0
 }
 
 # ---------------------------------------------------------------- 表格输出

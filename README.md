@@ -15,24 +15,35 @@ NGS 分析流程集合。每个流程是一个**自包含**的子目录：各自
 每个 `pipelines/<name>/` 保持同一套骨架，看一个流程就能猜出另一个：
 
 ```
-pipelines/<name>/
-├── bin/<name>        入口，只做参数解析与阶段调度
-├── src/              业务模块，一个阶段一个文件
-├── config/           默认配置（唯一配置源）
-├── deploy/           软件体检 + 参考数据下载
-├── reference/        参考基因组 / 已知位点 / 注释库（不进 git）
-├── extratools/       非 conda 安装的外部工具（不进 git）
-├── env/              conda 环境定义
-├── tests/            冒烟测试（不依赖生信工具）
-├── Makefile
-└── README.md         该流程的完整文档
+pipelines/
+├── _shared/
+│   └── common.sh     所有流程共用的基础设施（日志 / 命令执行 / 工具定位 / 断点状态）
+└── <name>/
+    ├── bin/<name>        入口，只做参数解析与阶段调度
+    ├── src/              业务模块，一个阶段一个文件
+    │   └── 00_common.sh  本流程特有的公共部分，source 上面那份 _shared
+    ├── config/           默认配置（唯一配置源）
+    ├── deploy/           软件体检 + 参考数据下载
+    ├── reference/        参考基因组 / 已知位点 / 注释库（不进 git）
+    ├── extratools/       非 conda 安装的外部工具（不进 git）
+    ├── env/              conda 环境定义
+    ├── tests/            冒烟测试（不依赖生信工具）
+    ├── Makefile
+    └── README.md         该流程的完整文档
 ```
+
+分界线只有一条：**把函数原样搬到另一个流程还能用，就进 `_shared`**。
+所以 `_shared` 里没有 `discover_*`（bwa 索引和 bowtie2 索引长得不一样）、
+没有 `stage_*`、也没有 `bundle_file()` 这种带流程假设的东西。
 
 这样划分的实际好处：
 
 - **加流程不碰别人**：新流程只在自己的目录里长，根目录只多一行索引。
-- **单个流程可整体拷走**：`cp -r pipelines/<name> /somewhere` 就能在别的机器上用。
+- **基础设施只维护一份**：日志格式、断点机制、工具探测改一次，所有流程同时生效。
 - **配置只有一处**：路径、线程、阈值都在 `config/`，脚本本身不含硬编码路径。
+
+> 注意：流程不再完全自包含。单独拷走一个流程时要连 `pipelines/_shared/` 一起拷，
+> 或者 `cp -r pipelines/<name> && cp -r pipelines/_shared` 到同一层。
 
 ## 使用
 
