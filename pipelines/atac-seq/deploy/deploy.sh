@@ -154,8 +154,26 @@ deploy_status() {
     row "ENCODE 黑名单" "缺失" "bash deploy/deploy.sh blacklist"
   fi
 
+  # HOMER 有两种存在方式：deploy 装在项目内 extratools/homer，或者本来就装在
+  # 系统/conda 里（课程镜像是 /home/biotools/miniforge3/envs/motif/share/homer）。
+  # 只看项目内那份会把"已经装好、⑫⑬ 一直在用"的 HOMER 报成缺失。
+  local hroot="" hbin="" cand=""
   if [[ -d "$HOMER_DIR/data/genomes/hg38" ]]; then
-    row "HOMER + hg38" "OK" "$(human_size "$HOMER_DIR")"
+    hroot="$HOMER_DIR"
+  else
+    hbin=$(find_tool annotatePeaks.pl 2>/dev/null || true)
+    if [[ -n "$hbin" ]]; then
+      # conda 布局：<prefix>/bin/annotatePeaks.pl → <prefix>/share/homer
+      # 经典布局：<homer>/bin/annotatePeaks.pl    → <homer>
+      for cand in \
+          "$(dirname "$(dirname "$(readlink -f "$hbin")")")/share/homer" \
+          "$(dirname "$(dirname "$(readlink -f "$hbin")")")"; do
+        [[ -d "$cand/data/genomes/hg38" ]] && { hroot="$cand"; break; }
+      done
+    fi
+  fi
+  if [[ -n "$hroot" ]]; then
+    row "HOMER + hg38" "OK" "$hroot ($(human_size "$hroot/data/genomes/hg38"))"
   else
     row "HOMER + hg38" "缺失" "bash deploy/deploy.sh homer"
   fi
